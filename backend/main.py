@@ -5,7 +5,7 @@ from typing import Optional
 import sqlite3, uuid, os, httpx
 from datetime import datetime
  
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
  
 app = FastAPI(title="AI Assistant API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
