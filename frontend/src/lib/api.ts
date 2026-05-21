@@ -1,4 +1,4 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://sanashakeel0821-ai-assistant-backend.hf.space";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://sanashakeel0821-ai-assistant.hf.space";
 
 export interface Session {
   id: string;
