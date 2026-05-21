@@ -5,7 +5,7 @@ from typing import Optional
 import sqlite3, uuid, os, httpx
 from datetime import datetime
  
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyAdd1vaCAML4HCToYPnItfTyN7Rv3EOa7o")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
  
 app = FastAPI(title="AI Assistant API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -109,27 +109,31 @@ async def chat(req: ChatRequest):
         (session_id,)
     ).fetchall()
  
-    prompt = "You are a helpful, friendly, and knowledgeable AI assistant. Provide clear, accurate, and concise responses. Be warm and supportive.\n\n"
-    for m in history:
-        role = "User" if m["role"] == "user" else "Assistant"
-        prompt += f"{role}: {m['content']}\n"
-    prompt += "Assistant:"
+    messages = [{"role": m["role"], "content": m["content"]} for m in history]
  
     ai_reply = "I'm sorry, I encountered an error. Please try again."
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}",
-                headers={"content-type": "application/json"},
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
                 json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"maxOutputTokens": 1024, "temperature": 0.7}
+                    "model": "llama3-8b-8192",
+                    "messages": [
+                        {"role": "system", "content": "You are a helpful, friendly, and knowledgeable AI assistant. Provide clear, accurate, and concise responses. Be warm and supportive in your tone."},
+                        *messages
+                    ],
+                    "max_tokens": 1024,
+                    "temperature": 0.7
                 }
             )
             data = resp.json()
-            ai_reply = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            ai_reply = data["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        print(f"Gemini error: {e}")
+        print(f"Groq error: {e}")
  
     ai_msg_id = str(uuid.uuid4())
     ai_now = datetime.utcnow().isoformat()
