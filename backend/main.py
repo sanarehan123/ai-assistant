@@ -121,7 +121,7 @@ async def chat(req: ChatRequest):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "llama3-8b-8192",
+                    "model": "llama-3.3-70b-versatile",
                     "messages": [
                         {"role": "system", "content": "You are a helpful, friendly, and knowledgeable AI assistant. Provide clear, accurate, and concise responses. Be warm and supportive in your tone."},
                         *messages
@@ -131,9 +131,14 @@ async def chat(req: ChatRequest):
                 }
             )
             data = resp.json()
-            ai_reply = data["choices"][0]["message"]["content"].strip()
+            print("Groq full response:", data)
+            if "choices" in data:
+                ai_reply = data["choices"][0]["message"]["content"].strip()
+            else:
+                error_msg = data.get("error", {})
+                print("Groq error details:", error_msg)
     except Exception as e:
-        print(f"Groq error: {e}")
+        print("Groq exception:", str(e))
  
     ai_msg_id = str(uuid.uuid4())
     ai_now = datetime.utcnow().isoformat()
