@@ -10,6 +10,37 @@ const SUGGESTIONS = [
   "Explain a concept simply",
 ];
 
+// Get or create a unique device ID stored in localStorage
+function getDeviceId(): string {
+  if (typeof window === "undefined") return "";
+  let id = localStorage.getItem("device_id");
+  if (!id) {
+    id = "device_" + Math.random().toString(36).slice(2) + Date.now();
+    localStorage.setItem("device_id", id);
+  }
+  return id;
+}
+
+// Get session IDs belonging to this device
+function getMySessionIds(): string[] {
+  if (typeof window === "undefined") return [];
+  const raw = localStorage.getItem("my_sessions");
+  return raw ? JSON.parse(raw) : [];
+}
+
+function saveMySessionId(id: string) {
+  const ids = getMySessionIds();
+  if (!ids.includes(id)) {
+    ids.unshift(id);
+    localStorage.setItem("my_sessions", JSON.stringify(ids));
+  }
+}
+
+function removeMySessionId(id: string) {
+  const ids = getMySessionIds().filter(s => s !== id);
+  localStorage.setItem("my_sessions", JSON.stringify(ids));
+}
+
 export default function Home() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
@@ -26,14 +57,18 @@ export default function Home() {
 
   const loadSessions = async () => {
     try {
-      const data = await apiFetch("/sessions");
-      setSessions(data);
+      const allSessions = await apiFetch("/sessions");
+      const myIds = getMySessionIds();
+      // Only show sessions belonging to this device
+      const mySessions = allSessions.filter((s: Session) => myIds.includes(s.id));
+      setSessions(mySessions);
     } catch {}
   };
 
   const newSession = async () => {
     try {
       const s = await apiFetch("/sessions", { method: "POST" });
+      saveMySessionId(s.id);
       setSessions(prev => [s, ...prev]);
       setActiveSession(s);
       setMessages([]);
@@ -52,6 +87,7 @@ export default function Home() {
     e.stopPropagation();
     try {
       await apiFetch(`/sessions/${sessionId}`, { method: "DELETE" });
+      removeMySessionId(sessionId);
       setSessions(prev => prev.filter(s => s.id !== sessionId));
       if (activeSession?.id === sessionId) {
         setActiveSession(null);
@@ -91,15 +127,20 @@ export default function Home() {
 
       setMessages(prev => [...prev, aiMsg]);
 
-      // If no active session, load sessions to get the new one
       if (!activeSession) {
-        const updated = await apiFetch("/sessions");
-        setSessions(updated);
-        const newS = updated.find((s: Session) => s.id === data.session_id);
+        saveMySessionId(data.session_id);
+        const allSessions = await apiFetch("/sessions");
+        const myIds = getMySessionIds();
+        const mySessions = allSessions.filter((s: Session) => myIds.includes(s.id));
+        setSessions(mySessions);
+        const newS = mySessions.find((s: Session) => s.id === data.session_id);
         if (newS) setActiveSession(newS);
       } else {
-        // Update session title in sidebar
-        loadSessions();
+        // Update title in sidebar
+        const allSessions = await apiFetch("/sessions");
+        const myIds = getMySessionIds();
+        const mySessions = allSessions.filter((s: Session) => myIds.includes(s.id));
+        setSessions(mySessions);
       }
     } catch {
       setMessages(prev => [...prev, {
@@ -132,28 +173,23 @@ export default function Home() {
       alert("Voice input is not supported in this browser. Please use Chrome.");
       return;
     }
-
     if (listening) {
       recognitionRef.current?.stop();
       setListening(false);
       return;
     }
-
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     const recognition = new SR();
     recognition.lang = "en-US";
     recognition.continuous = false;
     recognition.interimResults = false;
-
     recognition.onresult = (e: any) => {
       const transcript = e.results[0][0].transcript;
       setInput(transcript);
       setListening(false);
     };
-
     recognition.onerror = () => setListening(false);
     recognition.onend = () => setListening(false);
-
     recognitionRef.current = recognition;
     recognition.start();
     setListening(true);
@@ -173,18 +209,15 @@ export default function Home() {
 
   return (
     <div className="app">
-      {/* Sidebar */}
       <div className="sidebar">
         <div className="sidebar-header">
           <div className="logo">
             <div className="logo-icon">🤖</div>
             <div className="logo-text">AI Assistant</div>
           </div>
-          <button className="btn-new" onClick={newSession}>
-            ✦ New Chat
-          </button>
+          <button className="btn-new" onClick={newSession}>✦ New Chat</button>
         </div>
-        <div className="sidebar-label">History</div>
+        <div className="sidebar-label">My Chats</div>
         <div className="session-list">
           {sessions.length === 0 && (
             <div style={{ padding: "12px", color: "var(--text3)", fontSize: "13px" }}>
@@ -204,17 +237,14 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Main */}
       <div className="main">
         <div className="chat-header">
           <div>
             <div className="chat-title">{activeSession?.title || "AI Assistant"}</div>
-            <div className="chat-subtitle">Powered by Claude AI · Always here to help</div>
+            <div className="chat-subtitle">Powered by Groq AI · Always here to help</div>
           </div>
           {activeSession && messages.length > 0 && (
-            <button className="btn-export" onClick={exportChat}>
-              ↓ Export Chat
-            </button>
+            <button className="btn-export" onClick={exportChat}>↓ Export</button>
           )}
         </div>
 
@@ -234,12 +264,8 @@ export default function Home() {
 
           {messages.map(msg => (
             <div key={msg.id} className={`msg-row ${msg.role === "user" ? "user" : "ai"}`}>
-              <div className="msg-avatar">
-                {msg.role === "user" ? "👤" : "🤖"}
-              </div>
-              <div className="bubble" style={{ whiteSpace: "pre-wrap" }}>
-                {msg.content}
-              </div>
+              <div className="msg-avatar">{msg.role === "user" ? "👤" : "🤖"}</div>
+              <div className="bubble" style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
             </div>
           ))}
 
@@ -247,13 +273,10 @@ export default function Home() {
             <div className="msg-row ai">
               <div className="msg-avatar">🤖</div>
               <div className="bubble">
-                <div className="typing">
-                  <span /><span /><span />
-                </div>
+                <div className="typing"><span /><span /><span /></div>
               </div>
             </div>
           )}
-
           <div ref={bottomRef} />
         </div>
 
@@ -267,9 +290,7 @@ export default function Home() {
               onKeyDown={handleKeyDown}
               rows={1}
             />
-            <button className={`btn-voice ${listening ? "listening" : ""}`} onClick={toggleVoice} title="Voice input">
-              🎤
-            </button>
+            <button className={`btn-voice ${listening ? "listening" : ""}`} onClick={toggleVoice} title="Voice input">🎤</button>
             <button className="btn-send" onClick={() => sendMessage()} disabled={!input.trim() || loading}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M22 2L11 13M22 2L15 22 11 13 2 9l20-7z"/>
@@ -282,3 +303,5 @@ export default function Home() {
     </div>
   );
 }
+
+
