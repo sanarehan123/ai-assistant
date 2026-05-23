@@ -416,7 +416,7 @@ body { height: 100%; background: var(--bg); color: var(--text); font-family: var
   }
 
   .session-title { font-size: 11px; }
-  .btn-delete { display: none; }
+  .btn-delete { display: flex; opacity: 1; font-size: 11px; padding: 1px 3px; }
 
   .main { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 
